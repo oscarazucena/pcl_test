@@ -32,6 +32,8 @@
 
 #include "kitti_data_loader.h"
 
+#include "boost/program_options.hpp"
+
 //algorithm parameters
 float model_ss_ (0.01f);
 float scene_ss_ (0.01f);
@@ -42,7 +44,6 @@ float cg_thresh_ (5.0f);
 
 
 using namespace std;
-using namespace std::literals::chrono_literals;
 
 typedef PointXYZR PointType;
 typedef pcl::Normal NormalType;
@@ -307,10 +308,8 @@ boost::shared_ptr<pcl::visualization::PCLVisualizer> simpleVis (pcl::PointCloud<
 }
 
 std::atomic<bool> stop = {false};
-void loadData()
+void loadData( std::string path)
 {
-	std::cout << __FUNCDNAME__ << std::endl;
-    std::string path {"C:\pcl_workspace\KITTI\2011_09_26\2011_09_26_drive_0001_sync\velodyne_points\data"};
     std::vector<std::string> files = getListFile(path);
     std::sort(files.begin(),files.end());
     int size = files.size();
@@ -320,14 +319,37 @@ void loadData()
         viewerPsycho(files[count]);
         count = ++count%size;
     }
-	std::cout << __FUNCDNAME__ << std::endl;
 }
 
 int 
-main ()
+main (int argc, char** argv)
 {    
 
-	std::cout << __FUNCDNAME__ << std::endl;
+    namespace po = boost::program_options;
+
+    // Declare the supported options.
+    po::options_description desc("Allowed options");
+    desc.add_options()
+        ("help", "produce help message")
+        ("kitti_path", po::value<std::string>(), "set data path")
+    ;
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        return 0;
+    }
+
+    if (vm.count("kitti_path")) {
+        std::cout << "Kitti Data Path was set to "
+     << vm["kitti_path"].as<std::string>() << ".\n";
+    } else {
+        std::cout << "Kitti Data Path was not set.\n";
+        return 1;
+    }
 
     pcl::PointCloud<PointType>::Ptr model;
     pcl::PointCloud<PointType>::Ptr model_keypoints (new pcl::PointCloud<PointType> ());
@@ -343,7 +365,7 @@ main ()
 	std::cout << "loading data" << std::endl;
 
     pcl::CorrespondencesPtr model_scene_corrs (new pcl::Correspondences ());
-    KITTIDataLoader loader{"C:\\pcl_workspace\\KITTI\\2011_09_26\\2011_09_26_drive_0001_sync\\velodyne_points\\data\\0000000000.bin"};
+    KITTIDataLoader loader{vm["kitti_path"].as<std::string>()};
     model = loader.run();
 	std::cout << "data loaded" << std::endl;
 

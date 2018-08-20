@@ -1,32 +1,22 @@
-cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 project(cloud_viewer)
 variable_watch(VTK_DIR)
 
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 find_package(PCL 1.2 REQUIRED)
+
+find_package(Boost REQUIRED COMPONENTS program_options)
 
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
-set(loader_includes
-    src/kitti_data_loader.h
-    src/point_xyzr.h)
-
-set(loader_sources
-    src/kitti_data_loader.cpp
-    )
-
-add_library(kitti_loader ${loader_includes} ${loader_sources})
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 
 set(sources
     src/cloud_viewer.cpp
     )
 add_executable (cloud_viewer ${includes} ${sources})
-target_link_libraries (cloud_viewer ${PCL_LIBRARIES} kitti_loader)
+target_link_libraries (cloud_viewer ${PCL_LIBRARIES} KITTILoader::DataLoader ${Boost_LIBRARIES})
 
 set(sources_ec
 src/crfground.h
@@ -34,10 +24,11 @@ src/crfground.cpp
 src/eucledian_clustering.cpp
 )
 add_executable (eucledian_clustering ${sources_ec})
-target_link_libraries (eucledian_clustering ${PCL_LIBRARIES} kitti_loader)
+target_link_libraries (eucledian_clustering ${PCL_LIBRARIES} KITTILoader::DataLoader)
 
 add_executable (ground_estimation
     src/ground_estimation.cpp
     src/ground_estimation.h)
-target_link_libraries (ground_estimation ${PCL_LIBRARIES} kitti_loader)
+target_link_libraries (ground_estimation ${PCL_LIBRARIES} KITTILoader::DataLoader ${Boost_LIBRARIES})
 
+add_subdirectory(KITTI_Loader)

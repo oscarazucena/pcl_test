@@ -18,11 +18,16 @@
 
 #include "kitti_data_loader.h"
 
+#include "boost/program_options.hpp"
+
 #include <Eigen/Core>
 
 #include "ground_estimation.h"
 #include <Eigen/Dense>
 #include <string>
+
+#include <sstream>
+
 using Ground = Eigen::Vector3f;
 using GroundPlane = std::vector<Ground>;
 using MasurementMat = Eigen::Vector3f;
@@ -68,227 +73,288 @@ void calculateCloudProbability(PointXZYR_Cloud &cloud,const PointXZYGround_Cloud
 
 void calculateNewXandP(PointXZYGround_Cloud &Xi_K_1, const PointXZYGround_Cloud &Xi_K, PointXZYGround_Cloud &Xi_K_m_1, const PointXZYR_Cloud &cloud, const PointXZYGround_Cloud &X, float dl, float limit, float alpha, float beta, float gamma, int n)
 {
-	for ( auto &xi : Xi_K_1.points)
-	{
-		xi.sx = 0;
-		xi.sy = 0;
-		xi.z = 0;
-	}
+    for ( auto &xi : Xi_K_1.points)
+    {
+        xi.sx = 0;
+        xi.sy = 0;
+        xi.z = 0;
+    }
 
-	for (auto &point : cloud.points)
-	{
-		int nx = round((point.x + limit) / dl);
-		int ny = round((point.y + limit) / dl);
-		if (nx < 0 || nx >= n) continue;
-		if (ny < 0 || ny >= n) continue;
-		size_t index = GET_INDEX(nx, ny, n);
-		auto xi = Xi_K.points[index];
-		auto &xi_k_1 = Xi_K_1.points[index];
-		Eigen::Vector3f hij(1.0f, xi.x - point.x, xi.y - point.y);
-		Eigen::Vector3f result = alpha*point.r*point.z*hij;
-		xi_k_1.z += result(0);
-		xi_k_1.sx += result(1);
-		xi_k_1.sy += result(2);
-	}
+    for (auto &point : cloud.points)
+    {
+        int nx = round((point.x + limit) / dl);
+        int ny = round((point.y + limit) / dl);
+        if (nx < 0 || nx >= n) continue;
+        if (ny < 0 || ny >= n) continue;
+        size_t index = GET_INDEX(nx, ny, n);
+        auto xi = Xi_K.points[index];
+        auto &xi_k_1 = Xi_K_1.points[index];
+        Eigen::Vector3f hij(1.0f, xi.x - point.x, xi.y - point.y);
+        Eigen::Vector3f result = alpha*point.r*point.z*hij;
+        xi_k_1.z += result(0);
+        xi_k_1.sx += result(1);
+        xi_k_1.sy += result(2);
+    }
 
-	for (auto &xi_k_1 : Xi_K_1.points)
-	{
-		int nx = round((xi_k_1.x + limit) / dl);
-		int ny = round((xi_k_1.y + limit) / dl);
-		if (nx < 0 || nx >= n) continue;
-		if (ny < 0 || ny >= n) continue;
+    for (auto &xi_k_1 : Xi_K_1.points)
+    {
+        int nx = round((xi_k_1.x + limit) / dl);
+        int ny = round((xi_k_1.y + limit) / dl);
+        if (nx < 0 || nx >= n) continue;
+        if (ny < 0 || ny >= n) continue;
 
-		if (nx - 1 > 0)
-		{
-			F f;
-			f << 1.0f, -dl, 0,
-				0.0f, 1.0f, 0.0f,
-				0.0f, 0.0f, 1.0f;
-			auto xi_1 = Xi_K.points[GET_INDEX(nx-1,ny,n)];
-			Eigen::Vector3f xi_k(xi_1.z, xi_1.sx, xi_1.sy);
-			Eigen::Vector3f result = beta*f.transpose()*xi_k;
-			xi_k_1.z += result(0);
-			xi_k_1.sx += result(1);
-			xi_k_1.sy += result(2);
-		}
-		if (nx + 1 < n)
-		{
-			F f;
-			f << 1.0f, dl, 0,
-				0.0f, 1.0f, 0.0f,
-				0.0f, 0.0f, 1.0f;
-			auto xi_1 = Xi_K.points[GET_INDEX(nx + 1, ny, n)];
-			Eigen::Vector3f xi_k(xi_1.z, xi_1.sx, xi_1.sy);
-			Eigen::Vector3f result = beta*f.transpose()*xi_k;
-			xi_k_1.z += result(0);
-			xi_k_1.sx += result(1);
-			xi_k_1.sy += result(2);
-		}
+        if (nx - 1 > 0)
+        {
+            F f;
+            f << 1.0f, -dl, 0,
+                    0.0f, 1.0f, 0.0f,
+                    0.0f, 0.0f, 1.0f;
+            auto xi_1 = Xi_K.points[GET_INDEX(nx-1,ny,n)];
+            Eigen::Vector3f xi_k(xi_1.z, xi_1.sx, xi_1.sy);
+            Eigen::Vector3f result = beta*f.transpose()*xi_k;
+            xi_k_1.z += result(0);
+            xi_k_1.sx += result(1);
+            xi_k_1.sy += result(2);
+        }
+        if (nx + 1 < n)
+        {
+            F f;
+            f << 1.0f, dl, 0,
+                    0.0f, 1.0f, 0.0f,
+                    0.0f, 0.0f, 1.0f;
+            auto xi_1 = Xi_K.points[GET_INDEX(nx + 1, ny, n)];
+            Eigen::Vector3f xi_k(xi_1.z, xi_1.sx, xi_1.sy);
+            Eigen::Vector3f result = beta*f.transpose()*xi_k;
+            xi_k_1.z += result(0);
+            xi_k_1.sx += result(1);
+            xi_k_1.sy += result(2);
+        }
 
-		if (ny - 1 > 0)
-		{
-			F f;
-			f << 1.0f, 0, -dl,
-				0.0f, 1.0f, 0.0f,
-				0.0f, 0.0f, 1.0f;
-			auto xi_1 = Xi_K.points[GET_INDEX(nx , ny - 1, n)];
-			Eigen::Vector3f xi_k(xi_1.z, xi_1.sx, xi_1.sy);
-			Eigen::Vector3f result = beta*f.transpose()*xi_k;
-			xi_k_1.z += result(0);
-			xi_k_1.sx += result(1);
-			xi_k_1.sy += result(2);
-		}
-		if (ny + 1 < n)
-		{
-			F f;
-			f << 1.0f, 0, dl,
-				0.0f, 1.0f, 0.0f,
-				0.0f, 0.0f, 1.0f;
-			auto xi_1 = Xi_K.points[GET_INDEX(nx , ny + 1, n)];
-			Eigen::Vector3f xi_k(xi_1.z, xi_1.sx, xi_1.sy);
-			Eigen::Vector3f result = beta*f.transpose()*xi_k;
-			xi_k_1.z += result(0);
-			xi_k_1.sx += result(1);
-			xi_k_1.sy += result(2);
-		}
+        if (ny - 1 > 0)
+        {
+            F f;
+            f << 1.0f, 0, -dl,
+                    0.0f, 1.0f, 0.0f,
+                    0.0f, 0.0f, 1.0f;
+            auto xi_1 = Xi_K.points[GET_INDEX(nx , ny - 1, n)];
+            Eigen::Vector3f xi_k(xi_1.z, xi_1.sx, xi_1.sy);
+            Eigen::Vector3f result = beta*f.transpose()*xi_k;
+            xi_k_1.z += result(0);
+            xi_k_1.sx += result(1);
+            xi_k_1.sy += result(2);
+        }
+        if (ny + 1 < n)
+        {
+            F f;
+            f << 1.0f, 0, dl,
+                    0.0f, 1.0f, 0.0f,
+                    0.0f, 0.0f, 1.0f;
+            auto xi_1 = Xi_K.points[GET_INDEX(nx , ny + 1, n)];
+            Eigen::Vector3f xi_k(xi_1.z, xi_1.sx, xi_1.sy);
+            Eigen::Vector3f result = beta*f.transpose()*xi_k;
+            xi_k_1.z += result(0);
+            xi_k_1.sx += result(1);
+            xi_k_1.sy += result(2);
+        }
 
-		auto xi_k_m1 = Xi_K_m_1.points[GET_INDEX(nx, ny, n)];
-  		xi_k_1.z += gamma*xi_k_m1.z;
-		xi_k_1.sx += gamma*xi_k_m1.sx;
-		xi_k_1.sy += gamma*xi_k_m1.sy;
-	}
+        auto xi_k_m1 = Xi_K_m_1.points[GET_INDEX(nx, ny, n)];
+        xi_k_1.z += gamma*xi_k_m1.z;
+        xi_k_1.sx += gamma*xi_k_m1.sx;
+        xi_k_1.sy += gamma*xi_k_m1.sy;
+    }
 }
 
 struct PCLTextInfo
 {
-	PCLTextInfo()
-	{
+    PCLTextInfo()
+    {
 
-	}
-	PCLTextInfo(std::string t, int xin, int yin)
-	{
-		text = t;
-		x = xin;
-		y = yin;
-	}
-	int x;
-	int y;
-	std::string text;
+    }
+    PCLTextInfo(std::string t, int xin, int yin)
+    {
+        text = t;
+        x = xin;
+        y = yin;
+    }
+    int x;
+    int y;
+    std::string text;
 };
 
 class PLCVisualizerWorker
 {
 public:
 
-	PLCVisualizerWorker() :stopped_(false)
-	{
+    PLCVisualizerWorker() :stopped_(false), quit_(false)
+    {
 
-	}
+    }
 
-	~PLCVisualizerWorker() 
-	{
-		thread.join();
-	}
+    ~PLCVisualizerWorker()
+    {
+        thread.join();
+    }
 
-	bool wasStopped()
-	{
-		return stopped_;
-	}
+    bool wasStopped()
+    {
+        return stopped_;
+    }
 
-	void addCloud(pcl::PointCloud<PointXYZR>::Ptr cloud, pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>::Ptr color, std::string key)
-	{
-		mtx.lock();
-		clouds_[key] = cloud;
-		color_[key] = color;
-		mtx.unlock();
+    void addCloud(pcl::PointCloud<PointXYZR>::Ptr cloud, pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>::Ptr color, std::string key)
+    {
+        mtx.lock();
+        clouds_[key] = cloud;
+        color_[key] = color;
+        mtx.unlock();
 
-	}
+    }
 
-	void addText(std::string key, PCLTextInfo info)
-	{
-		text_mutex.lock();
-		texts_[key] = info;
-		text_mutex.unlock();
-	}
+    void addText(std::string key, PCLTextInfo info)
+    {
+        text_mutex.lock();
+        texts_[key] = info;
+        text_mutex.unlock();
+    }
 
-	void run()
-	{
-		thread = std::thread([this] {
-			pcl::visualization::PCLVisualizer viewer("Cloud Display");
+    void stop()
+    {
+        quit_= true;
+    }
 
-			while (!viewer.wasStopped())
-			{
+    void run()
+    {
+        thread = std::thread([this] {
+            pcl::visualization::PCLVisualizer viewer("Cloud Display");
 
-				{
-					mtx.lock();
-					if (!clouds_.empty())
-					{
-						for (auto cloud_pair : clouds_)
-						{
+            while (!viewer.wasStopped())
+            {
 
-							if (!viewer.updatePointCloud<PointXYZR>(cloud_pair.second, *color_[cloud_pair.first], cloud_pair.first))
-							{
-								std::cout << "Add cloud: " << cloud_pair.first << std::endl;
-								viewer.addPointCloud<PointXYZR>(cloud_pair.second, *color_[cloud_pair.first], cloud_pair.first);
-							}
-						}
-					}
-					clouds_.clear();
-					color_.clear();
-					mtx.unlock();
-					text_mutex.lock();
-					if(!texts_.empty())
-					{
-						for (auto text_pair : texts_)
-						{
-							if (!viewer.updateText(text_pair.second.text, text_pair.second.x, text_pair.second.y, text_pair.first))
-							{
-								viewer.addText(text_pair.second.text, text_pair.second.x, text_pair.second.y, text_pair.first);
-							}
-						}
-					}
-					texts_.clear();
-					text_mutex.unlock();
-				}
-				viewer.spinOnce(100);
-			}
-			stopped_ = true;
-		});
-	}
+                {
+                    mtx.lock();
+                    if (!clouds_.empty())
+                    {
+                        for (auto cloud_pair : clouds_)
+                        {
+
+                            if (!viewer.updatePointCloud<PointXYZR>(cloud_pair.second, *color_[cloud_pair.first], cloud_pair.first))
+                            {
+                                std::cout << "Add cloud: " << cloud_pair.first << std::endl;
+                                viewer.addPointCloud<PointXYZR>(cloud_pair.second, *color_[cloud_pair.first], cloud_pair.first);
+                            }
+                        }
+                    }
+                    clouds_.clear();
+                    color_.clear();
+                    mtx.unlock();
+                    text_mutex.lock();
+                    if(!texts_.empty())
+                    {
+                        for (auto text_pair : texts_)
+                        {
+                            if (!viewer.updateText(text_pair.second.text, text_pair.second.x, text_pair.second.y, text_pair.first))
+                            {
+                                viewer.addText(text_pair.second.text, text_pair.second.x, text_pair.second.y, text_pair.first);
+                            }
+                        }
+                    }
+                    texts_.clear();
+                    text_mutex.unlock();
+                }
+
+                if(quit_)
+                {
+                    viewer.close();
+                }
+                else
+                {
+                    viewer.spinOnce(100);
+                }
+            }
+            stopped_ = true;
+        });
+    }
 
 
 private:
-	std::map<std::string, pcl::PointCloud<PointXYZR>::Ptr> clouds_;
-	std::map<std::string, pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>::Ptr> color_;
-	std::map<std::string, PCLTextInfo> texts_;
-	std::mutex mtx;           // mutex for critical section
-	std::mutex text_mutex;    //mutex to lock text addition
-	bool stopped_;
-	std::thread thread;
+    std::map<std::string, pcl::PointCloud<PointXYZR>::Ptr> clouds_;
+    std::map<std::string, pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>::Ptr> color_;
+    std::map<std::string, PCLTextInfo> texts_;
+    std::mutex mtx;           // mutex for critical section
+    std::mutex text_mutex;    //mutex to lock text addition
+    bool stopped_;
+    bool quit_;
+    std::thread thread;
 };
 
 std::vector<std::string> getListFile(std::string path)
 {
-	std::vector<std::string> files;
+    std::vector<std::string> files;
 
-	if (!path.empty())
-	{
-		namespace fs = boost::filesystem;
+    if (!path.empty())
+    {
+        namespace fs = boost::filesystem;
 
-		fs::path apk_path(path);
-		fs::recursive_directory_iterator end;
+        fs::path apk_path(path);
+        fs::recursive_directory_iterator end;
 
-		for (fs::recursive_directory_iterator i(apk_path); i != end; ++i)
-		{
-			const fs::path cp = (*i);
-			files.push_back(cp.string());
-		}
-	}
-	return files;
+        for (fs::recursive_directory_iterator i(apk_path); i != end; ++i)
+        {
+            const fs::path cp = (*i);
+            files.push_back(cp.string());
+        }
+    }
+
+
+    std::sort(files.begin(), files.end(), [](const std::string &lhs, const std::string &rhs) { return lhs < rhs; });
+    return files;
 }
 
 int main (int argc, char** argv)
 {
+
+    namespace po = boost::program_options;
+
+    // Declare the supported options.
+    po::options_description desc("Allowed options");
+    desc.add_options()
+            ("help", "produce help message")
+            ("kitti_lidar_path", po::value<std::string>(), "set lidar data path")
+            ("kitti_oxts_path", po::value<std::string>(), "set oxs data path")
+            ("kitti_timestamp_file", po::value<std::string>(), "set time stamp fiel path")
+            ;
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        return 0;
+    }
+
+    if (vm.count("kitti_lidar_path")) {
+        std::cout << "Kitti LiDAR Data Path was set to "
+                  << vm["kitti_lidar_path"].as<std::string>() << ".\n";
+    } else {
+        std::cout << "Kitti Data Path was not set.\n";
+        return 1;
+    }
+
+    if (vm.count("kitti_oxts_path")) {
+        std::cout << "Kitti OXS Data Path was set to "
+                  << vm["kitti_oxts_path"].as<std::string>() << ".\n";
+    } else {
+        std::cout << "Kitti OXS Data Path was not set.\n";
+        return 1;
+    }
+
+    if (vm.count("kitti_timestamp_file")) {
+        std::cout << "Kitti TimeStamp fiel was set to "
+                  << vm["kitti_timestamp_file"].as<std::string>() << ".\n";
+    } else {
+        std::cout << "Kitti TimeStamp file was not set.\n";
+        return 1;
+    }
 
     int nx = 100;
     int ny = 100;
@@ -333,69 +399,95 @@ int main (int argc, char** argv)
             P_cloud.points[GET_INDEX(x,y,nx)] = p;
         }
     }
-	PLCVisualizerWorker worker;
-	worker.run();
-	auto files = getListFile("C:\\pcl_workspace\\KITTI\\2011_09_26\\2011_09_26_drive_0001_sync\\velodyne_points\\data\\");
-	auto gps_files = getListFile("C:\\pcl_workspace\\KITTI\\2011_09_26\\2011_09_26_drive_0001_sync\\oxts\\data\\");
-	int counter = 0;
-	for (auto file : files)
-	{
-		// Read in the cloud data
-		//pcl::PCDReader reader;
-		pcl::PointCloud<PointXYZR>::Ptr cloud_f(new pcl::PointCloud<PointXYZR>);
-		//reader.read ("table_scene_lms400.pcd", *cloud);
-		KITTIDataLoader loader{ file };
-		KITTIIMUGPSData gps{gps_files[counter++]};
-		auto gps_map = gps.run();
-		pcl::PointCloud<PointXYZR>::Ptr cloud = loader.run();
-		pcl::PointCloud<PointXYZR>::Ptr cloud_filtered(new pcl::PointCloud<PointXYZR>);
-		pcl::PointCloud<PointXYZR>::Ptr cloud_remaining(new pcl::PointCloud<PointXYZR>);
-		// Create the filtering object: filter data to 100x100 m area
-		pcl::ConditionAnd<PointXYZR>::Ptr range_cond(new pcl::ConditionAnd<PointXYZR>());
-		range_cond->addComparison(pcl::FieldComparison<PointXYZR>::Ptr(new pcl::FieldComparison<PointXYZR>("x", pcl::ComparisonOps::LT, x_limit)));
-		range_cond->addComparison(pcl::FieldComparison<PointXYZR>::Ptr(new pcl::FieldComparison<PointXYZR>("x", pcl::ComparisonOps::GT, -x_limit)));
-		range_cond->addComparison(pcl::FieldComparison<PointXYZR>::Ptr(new pcl::FieldComparison<PointXYZR>("y", pcl::ComparisonOps::LT, y_limit)));
-		range_cond->addComparison(pcl::FieldComparison<PointXYZR>::Ptr(new pcl::FieldComparison<PointXYZR>("y", pcl::ComparisonOps::GT, -y_limit)));
-		pcl::ConditionalRemoval<PointXYZR> range_filt;
-		range_filt.setCondition(range_cond);
-		range_filt.setInputCloud(cloud);
-		range_filt.setKeepOrganized(false);
+    PLCVisualizerWorker worker;
+    worker.run();
+    auto files = getListFile(vm["kitti_lidar_path"].as<std::string>());
+    auto gps_files = getListFile(vm["kitti_oxts_path"].as<std::string>());
 
-		// The indices_x array indexes all points of cloud_in that have x between 0.0 and 1000.0
-		range_filt.filter(*cloud_filtered);
-		// The indices_rem array indexes all points of cloud_in that have x smaller than 0.0 or larger than 1000.0
-		//indices_rem = range_filt.getRemovedIndices ();
+    int counter = 0;
+    KITTITimeStampData time_stamp_loader{vm["kitti_timestamp_file"].as<std::string>()};
 
-		//viewer.addPointCloud<PointXYZR> (cloud, "cloud");
-		pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>::Ptr plane_color_handler{ new pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>(cloud, 255, 0, 255) };
-		pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>::Ptr off_scene_model_color_handler{ new pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>(cloud_filtered, 0, 255, 255) };
-		//viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "cloud_filtered");
-		//viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "cloud");
-	   worker.addCloud(cloud, plane_color_handler,"cloud");
-	  worker.addCloud(cloud_filtered, off_scene_model_color_handler, "cloud_filtered");
-	  auto format = [](float data)
-	  {
-		  return std::to_string(data);
-	  };
-	  PCLTextInfo info = { file,0,0 };
-	  PCLTextInfo lat = { format(gps_map["vf"]),0,20 };
-	  PCLTextInfo lon = { format(gps_map["vl"]),0,40 };
+    auto timestamps = time_stamp_loader.run();
 
-	  worker.addText("File",info);
-	  worker.addText("vf", lat);
-	  worker.addText("vl", lon);
-	  std::cout << "File: " << file << std::endl;
-	  for (auto pair : gps_map)
-	  {
-		  std::cout << pair.first << " : " << pair.second << std::endl;
-	  }
-	}
-	while (!worker.wasStopped())
-	{
-		std::this_thread::sleep_for(std::chrono::nanoseconds(1));
-		continue;
-	}
-	std::cout << "Outside of loop" << std::endl;
+    auto format = [](float data)
+    {
+        return std::to_string(data);
+    };
+
+    auto format_time = [](const KITTITimeStamp &stamp)->std::string
+    {
+        char buff[100];
+        strftime (buff, 100, "%F %H:%M:%S.", &stamp.tm);
+        long nanoseconds = stamp.nanoseconds.count();
+        return std::string(buff)+std::to_string(nanoseconds);
+    };
+    for (auto file : files)
+    {
+        // Read in the cloud data
+        //pcl::PCDReader reader;
+        pcl::PointCloud<PointXYZR>::Ptr cloud_f(new pcl::PointCloud<PointXYZR>);
+        //reader.read ("table_scene_lms400.pcd", *cloud);
+        KITTIDataLoader loader{ file };
+        KITTIIMUGPSData gps{gps_files[counter]};
+        auto gps_map = gps.run();
+        pcl::PointCloud<PointXYZR>::Ptr cloud = loader.run();
+        pcl::PointCloud<PointXYZR>::Ptr cloud_filtered(new pcl::PointCloud<PointXYZR>);
+        pcl::PointCloud<PointXYZR>::Ptr cloud_remaining(new pcl::PointCloud<PointXYZR>);
+        // Create the filtering object: filter data to 100x100 m area
+        pcl::ConditionAnd<PointXYZR>::Ptr range_cond(new pcl::ConditionAnd<PointXYZR>());
+        range_cond->addComparison(pcl::FieldComparison<PointXYZR>::Ptr(new pcl::FieldComparison<PointXYZR>("x", pcl::ComparisonOps::LT, x_limit)));
+        range_cond->addComparison(pcl::FieldComparison<PointXYZR>::Ptr(new pcl::FieldComparison<PointXYZR>("x", pcl::ComparisonOps::GT, -x_limit)));
+        range_cond->addComparison(pcl::FieldComparison<PointXYZR>::Ptr(new pcl::FieldComparison<PointXYZR>("y", pcl::ComparisonOps::LT, y_limit)));
+        range_cond->addComparison(pcl::FieldComparison<PointXYZR>::Ptr(new pcl::FieldComparison<PointXYZR>("y", pcl::ComparisonOps::GT, -y_limit)));
+        pcl::ConditionalRemoval<PointXYZR> range_filt;
+        range_filt.setCondition(range_cond);
+        range_filt.setInputCloud(cloud);
+        range_filt.setKeepOrganized(false);
+
+        // The indices_x array indexes all points of cloud_in that have x between 0.0 and 1000.0
+        range_filt.filter(*cloud_filtered);
+        // The indices_rem array indexes all points of cloud_in that have x smaller than 0.0 or larger than 1000.0
+        //indices_rem = range_filt.getRemovedIndices ();
+
+        //viewer.addPointCloud<PointXYZR> (cloud, "cloud");
+        pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>::Ptr plane_color_handler{ new pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>(cloud, 255, 0, 255) };
+        pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>::Ptr off_scene_model_color_handler{ new pcl::visualization::PointCloudColorHandlerCustom<PointXYZR>(cloud_filtered, 0, 255, 255) };
+        //viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "cloud_filtered");
+        //viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "cloud");
+        worker.addCloud(cloud, plane_color_handler,"cloud");
+        worker.addCloud(cloud_filtered, off_scene_model_color_handler, "cloud_filtered");
+
+        PCLTextInfo info = { file,0,0 };
+        PCLTextInfo lat = { format(gps_map["vf"]),0,20 };
+        PCLTextInfo lon = { format(gps_map["vl"]),0,40 };
+
+        auto tm = timestamps.at(counter);
+        PCLTextInfo time = { format_time(tm),0,60 };
+
+        worker.addText("File",info);
+        worker.addText("vf", lat);
+        worker.addText("vl", lon);
+        worker.addText("timestamp", time);
+        std::cout << "File: " << file << std::endl;
+        for (auto pair : gps_map)
+        {
+            //std::cout << pair.first << " : " << pair.second << std::endl;
+        }
+
+        std::cout << "Time: " << format_time(tm) << std::endl;
+
+        ++counter;
+
+    }
+    while (!worker.wasStopped())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    // worker.stop();
+    while (!worker.wasStopped())
+    {
+        std::cout << "Waiting to stop" << std::endl;
+    }
 
     return (0);
 }
