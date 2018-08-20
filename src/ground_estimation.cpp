@@ -16,7 +16,8 @@
 #include <mutex>          // std::mutex
 #include <chrono>
 
-#include "kitti_data_loader.h"
+#include <kitti_data_loader.h>
+#include <kitti_time_stamp_data.h>
 
 #include "boost/program_options.hpp"
 

@@ -10,26 +10,8 @@
 
 #include <string>
 #include "point_xyzr.h"
-#include <boost/signals2.hpp>
-
 #include <chrono>
 
-struct KITTITimeStamp
-{
-    std::tm tm;
-    std::chrono::nanoseconds nanoseconds;
-};
-
-class KITTITimeStampData
-{
-public:
-	KITTITimeStampData(std::string file_path_in);
-    std::vector<KITTITimeStamp> run();
-private:
-	bool loadData();
-	std::string file_path;
-    std::vector<KITTITimeStamp> map;
-};
 
 class KITTIIMUGPSData
 {
@@ -41,6 +23,7 @@ private:
 	std::string file_path;
 	std::map<std::string, float> map;
 };
+
 class KITTIDataLoader
 {
 public:
