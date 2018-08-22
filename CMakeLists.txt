@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 project(cloud_viewer)
-variable_watch(VTK_DIR)
 
 find_package(PCL 1.2 REQUIRED)
 
@@ -29,6 +28,9 @@ target_link_libraries (eucledian_clustering ${PCL_LIBRARIES} KITTILoader::DataLo
 add_executable (ground_estimation
     src/ground_estimation.cpp
     src/ground_estimation.h)
-target_link_libraries (ground_estimation ${PCL_LIBRARIES} KITTILoader::DataLoader ${Boost_LIBRARIES})
+
+target_link_libraries (ground_estimation ${PCL_LIBRARIES} PCLThreadedViewer::Viewer KITTILoader::DataLoader ${Boost_LIBRARIES})
 
 add_subdirectory(KITTI_Loader)
+
+add_subdirectory(PCL_Viewer)
